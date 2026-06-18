@@ -26,11 +26,9 @@ if(WIN32)
             "${CONTRIB_DIR}/Lua/bin/lua54.dll"
             $<TARGET_FILE_DIR:SlateXClient>
     )
-    target_link_libraries(SlateXClient PRIVATE Engine Network Rendering)
-else()
-    target_link_libraries(SXS PRIVATE -Wl,--whole-archive Engine Network -Wl,--no-whole-archive
-        ${GNS_LIB} ssl crypto protobuf)
 endif()
+
+target_link_libraries(SlateXClient PRIVATE Network Rendering)
 
 add_custom_command(TARGET SlateXClient POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

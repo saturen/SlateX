@@ -23,11 +23,9 @@ if(WIN32)
             "${CONTRIB_DIR}/Lua/bin/lua54.dll"
             $<TARGET_FILE_DIR:SXS>
     )
-    target_link_libraries(SXS PRIVATE -Wl,--whole-archive Engine Network -Wl,--whole-archive)
-else()
-    target_link_libraries(SXS PRIVATE -Wl,--whole-archive Engine Network -Wl,--no-whole-archive
-        ${GNS_LIB} ssl crypto protobuf)
 endif()
+
+target_link_libraries(SXS PRIVATE Network)
 
 add_custom_command(TARGET SXS POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

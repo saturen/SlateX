@@ -5,6 +5,8 @@
 #include <iostream>
 #include <algorithm>
 #include <stdexcept>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 GNSTransport* GNSTransport::s_instance = nullptr;
 
@@ -57,7 +59,6 @@ bool GNSTransport::StartServer(uint16_t Port) {
 }
 
 void GNSTransport::SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data) {
-    // first byte is signal type, then payload
     Serializer Packet;
     Packet.WriteByte(static_cast<uint8_t>(Signal));
     Packet.WriteRawBuffer(Data.GetBuffer());
@@ -85,9 +86,24 @@ bool GNSTransport::Connect(const std::string& Host, uint16_t Port) {
     m_isServer = false;
 
     SteamNetworkingIPAddr Addr;
-    if (!Addr.ParseString((Host + ":" + std::to_string(Port)).c_str())) {
-        std::cerr << "[GNSTransport] bad address: " << Host << ":" << Port << "\n";
-        return false;
+    Addr.Clear();
+
+    // Сначала пробуем как IPv4
+    struct in_addr ipv4;
+    if (inet_pton(AF_INET, Host.c_str(), &ipv4) == 1) {
+        Addr.SetIPv4(ntohl(ipv4.s_addr), Port);
+    } else {
+        // Резолвим домен
+        struct addrinfo hints{}, *res = nullptr;
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        if (getaddrinfo(Host.c_str(), nullptr, &hints, &res) != 0 || !res) {
+            std::cerr << "[GNSTransport] failed to resolve host: " << Host << "\n";
+            return false;
+        }
+        auto* sa = reinterpret_cast<struct sockaddr_in*>(res->ai_addr);
+        Addr.SetIPv4(ntohl(sa->sin_addr.s_addr), Port);
+        freeaddrinfo(res);
     }
 
     SteamNetworkingConfigValue_t Opt;
