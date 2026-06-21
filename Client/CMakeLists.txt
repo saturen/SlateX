@@ -28,7 +28,7 @@ if(WIN32)
     )
 endif()
 
-target_link_libraries(SlateXClient PRIVATE Network Rendering)
+target_link_libraries(SlateXClient PRIVATE Runtime Rendering)
 
 add_custom_command(TARGET SlateXClient POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

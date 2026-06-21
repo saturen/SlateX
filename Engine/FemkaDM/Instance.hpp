@@ -6,11 +6,18 @@
 #include <vector>
 #include <memory>
 #include <functional>
-#include "../slDBG/slDBG.hpp"
+#include <cstdint>
+#include <unordered_map>
 
 class Instance;
-using InstanceRef = std::shared_ptr<Instance>;
+using InstanceRef  = std::shared_ptr<Instance>;
 using InstanceWeak = std::weak_ptr<Instance>;
+
+enum class FilterMode : uint32_t {
+    Server = 0,  // не реплицируется клиентам вообще
+    Shared = 1,  // реплицируется всем, изменяем с обеих сторон (с проверкой ownership)
+    Client = 2,  // реплицируется всем, но "истина" живёт на клиенте-владельце
+};
 
 // base class for everything in the datamodel tree
 // da fuck you doing, dont instantiate this directly
@@ -21,17 +28,28 @@ public:
 
     // --- properties ---
 
-    const std::string& GetName()      const { return m_name; }
     const std::string& GetClassName() const { return m_className; }
-    bool               GetArchivable() const { return m_archivable; }
+    const std::string& GetName()      const { return m_name; }
+    void                SetName(const std::string& Name);
 
-    void SetName(const std::string& Name);
-    void SetParent(InstanceRef Parent);
-    void SetArchivable(bool Archivable) { m_archivable = Archivable; }
+    // virtual IsA — переопределяется в каждом наследнике, проверяет всю цепочку
+    virtual bool IsA(const std::string& ClassName) const;
 
-    InstanceRef GetParent() const { return m_parent.lock(); }
+    // --- сеть ---
+
+    uint32_t   GetNetId() const { return m_netId; }
+    void       SetNetId(uint32_t id);
+
+    // обратный поиск — нужен для десериализации InstanceRef-аргументов
+    // в NetworkEvent (см. Network/Shared/LuaArgSerializer)
+    static InstanceRef FindByNetId(uint32_t id);
+    FilterMode GetFilterMode() const { return m_filterMode; }
+    void       SetFilterMode(FilterMode m) { m_filterMode = m; }
 
     // --- tree traversal ---
+
+    InstanceRef GetParent() const { return m_parent.lock(); }
+    void        SetParent(InstanceRef NewParent);
 
     // returns direct children
     std::vector<InstanceRef> GetChildren() const;
@@ -50,6 +68,7 @@ public:
 
     // walks up the tree looking for ancestor by name
     InstanceRef FindFirstAncestor(const std::string& Name) const;
+    InstanceRef FindFirstAncestorWhichIsA(const std::string& ClassName) const;
 
     // full path like "Workspace.Model.Part"
     std::string GetFullName() const;
@@ -63,10 +82,6 @@ public:
     bool IsDescendantOf(const Instance* Ancestor) const;
     bool IsAncestorOf(const Instance* Descendant) const;
 
-    // this is the big one — checks class hierarchy
-    // returns true if this IS a ClassName or inherits from it
-    virtual bool IsA(const std::string& ClassName) const;
-
     // --- lifecycle ---
 
     // nukes this instance and all children, sets parent to nil
@@ -78,6 +93,14 @@ public:
 
     // destroys all children, leaves this instance alive
     void ClearAllChildren();
+
+    bool IsDestroyed() const { return m_destroyed; }
+
+    // --- свойства: блокировка от записи по сети (см. Replicator::CanClientChangeProperty) ---
+
+    bool IsPropertyLocked(const std::string& Prop) const;
+    void LockProperty(const std::string& Prop);
+    void UnlockProperty(const std::string& Prop);
 
     // --- children management (internal, not really for scripts) ---
 
@@ -107,14 +130,24 @@ public:
     // fires when any property changes — gives you the property name
     std::function<void(const std::string&)> Changed;
 
+    // --- хуки для Replicator (заполняются им же при WatchInstance) ---
+
+    std::function<void(const std::string&)> OnChanged;
+    std::function<void(InstanceRef)>        OnChildAdded;
+    std::function<void(InstanceRef)>        OnChildRemoved;
+    std::function<void(InstanceRef)>        OnDestroyed;
+
 protected:
-    std::string  m_className;
-    std::string  m_name;
-    bool         m_archivable = true;
-    bool         m_destroyed  = false;
+    std::string m_className;
+    std::string m_name;
+    uint32_t    m_netId      = 0;
+    FilterMode  m_filterMode = FilterMode::Shared;
+    bool        m_archivable = true;
+    bool        m_destroyed  = false;
 
     InstanceWeak              m_parent;
-    std::vector<InstanceWeak> m_children;
+    std::vector<InstanceRef>  m_children;
+    std::vector<std::string>  m_lockedProps;
 
     // called by subclasses to fire Changed event
     void NotifyChanged(const std::string& PropName);

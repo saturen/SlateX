@@ -4,6 +4,8 @@
 #include "ClientReplicator.hpp"
 #include <iostream>
 
+ClientReplicator* ClientReplicator::s_active = nullptr;
+
 ClientReplicator::ClientReplicator(std::unique_ptr<ITransport> Transport)
     : ReplicatorBase(std::move(Transport)) {
     m_log = slDBG::NewLog("Logs/ClientReplicator.log", "ClientReplicator");
@@ -11,13 +13,9 @@ ClientReplicator::ClientReplicator(std::unique_ptr<ITransport> Transport)
 
 bool ClientReplicator::Connect(const std::string& Host, uint16_t Port) {
     if (m_log) m_log->Info("Connecting to", Host + ":" + std::to_string(Port));
-    return m_transport->Connect(Host, Port);
-}
-
-void ClientReplicator::SendMessage(const std::string& Message) {
-    Serializer S;
-    S.WriteString(Message);
-    m_transport->Send(PacketSignal::RemoteEvent, S);
+    bool Ok = m_transport->Connect(Host, Port);
+    if (Ok) s_active = this;
+    return Ok;
 }
 
 void ClientReplicator::OnPacketReceived(ConnId From, PacketSignal Signal, Deserializer& D) {
@@ -26,14 +24,6 @@ void ClientReplicator::OnPacketReceived(ConnId From, PacketSignal Signal, Deseri
         std::string Msg = D.ReadString();
         std::cout << "[ClientReplicator] Welcome from server: " << Msg << "\n";
         if (m_log) m_log->Info("Welcome", Msg);
-        if (OnMessageReceived) OnMessageReceived(Msg);
-        break;
-    }
-    case PacketSignal::RemoteEvent: {
-        std::string Msg = D.ReadString();
-        std::cout << "[ClientReplicator] Message from server: " << Msg << "\n";
-        if (m_log) m_log->Info("Message from server", Msg);
-        if (OnMessageReceived) OnMessageReceived(Msg);
         break;
     }
     case PacketSignal::Kick: {
@@ -46,6 +36,8 @@ void ClientReplicator::OnPacketReceived(ConnId From, PacketSignal Signal, Deseri
     case PacketSignal::Pong:
         // da server is alive
         break;
+    // RemoteEvent / RemoteFunction are handled by NetworkEvent (see
+    // Network/Shared/NetworkEvent.hpp)
     default:
         if (m_log)
             m_log->Warn("Unknown packet", std::to_string(static_cast<int>(Signal)));
@@ -57,9 +49,6 @@ void ClientReplicator::OnConnected() {
     std::cout << "[ClientReplicator] Connected to server\n";
     if (m_log) m_log->Info("Connected to server");
     if (OnConnectedToServer) OnConnectedToServer();
-
-    // da first thing we do — say hello
-    SendMessage("hello from client");
 }
 
 void ClientReplicator::OnDisconnected(const std::string& Reason) {

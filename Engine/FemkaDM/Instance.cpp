@@ -11,9 +11,34 @@ Instance::Instance(const std::string& ClassName)
 }
 
 Instance::~Instance() {
-    // make sure we cleaned up
-    if (!m_destroyed)
-        RemoveChild(this);
+    // с owning m_children (shared_ptr) деструктор и так не вызовется,
+    // пока родитель нас держит — отдельная отвязка тут не нужна
+}
+
+// --- NetId registry ---
+// статика на файл, не на класс — чтобы не тащить unordered_map в каждый .o,
+// который инклюдит Instance.hpp
+
+static std::unordered_map<uint32_t, InstanceWeak> g_netIdRegistry;
+
+void Instance::SetNetId(uint32_t id) {
+    // снимаем себя со старого id, если был
+    if (m_netId != 0) {
+        auto it = g_netIdRegistry.find(m_netId);
+        if (it != g_netIdRegistry.end())
+            g_netIdRegistry.erase(it);
+    }
+
+    m_netId = id;
+
+    if (id != 0)
+        g_netIdRegistry[id] = weak_from_this();
+}
+
+InstanceRef Instance::FindByNetId(uint32_t id) {
+    auto it = g_netIdRegistry.find(id);
+    if (it == g_netIdRegistry.end()) return nullptr;
+    return it->second.lock();
 }
 
 // --- SetName ---
@@ -50,16 +75,10 @@ void Instance::SetParent(InstanceRef Parent) {
 // --- AddChild / RemoveChild ---
 
 void Instance::AddChild(InstanceRef Child) {
-    // clean up dead weak ptrs while we are here
-    m_children.erase(
-        std::remove_if(m_children.begin(), m_children.end(),
-            [](const InstanceWeak& W) { return W.expired(); }),
-        m_children.end()
-    );
-
     m_children.push_back(Child);
 
     if (ChildAdded) ChildAdded(Child);
+    if (OnChildAdded) OnChildAdded(Child); // Replicator: InstanceAdded по сети
     FireDescendantAdded(Child);
 }
 
@@ -68,13 +87,12 @@ void Instance::RemoveChild(Instance* Child) {
 
     m_children.erase(
         std::remove_if(m_children.begin(), m_children.end(),
-            [&](const InstanceWeak& W) {
-                auto Locked = W.lock();
-                if (Locked && Locked.get() == Child) {
-                    Removed = Locked;
+            [&](const InstanceRef& C) {
+                if (C.get() == Child) {
+                    Removed = C;
                     return true;
                 }
-                return W.expired();
+                return false;
             }),
         m_children.end()
     );
@@ -82,27 +100,21 @@ void Instance::RemoveChild(Instance* Child) {
     if (Removed) {
         FireDescendantRemoving(Removed);
         if (ChildRemoved) ChildRemoved(Removed);
+        if (OnChildRemoved) OnChildRemoved(Removed); // Replicator: InstanceRemoved по сети
     }
 }
 
 // --- GetChildren ---
 
 std::vector<InstanceRef> Instance::GetChildren() const {
-    std::vector<InstanceRef> Out;
-    for (const auto& W : m_children) {
-        auto Locked = W.lock();
-        if (Locked) Out.push_back(Locked);
-    }
-    return Out;
+    return m_children;
 }
 
 // --- GetDescendants ---
 
 std::vector<InstanceRef> Instance::GetDescendants() const {
     std::vector<InstanceRef> Out;
-    for (const auto& W : m_children) {
-        auto Child = W.lock();
-        if (!Child) continue;
+    for (const auto& Child : m_children) {
         Out.push_back(Child);
         auto Sub = Child->GetDescendants();
         Out.insert(Out.end(), Sub.begin(), Sub.end());
@@ -113,9 +125,7 @@ std::vector<InstanceRef> Instance::GetDescendants() const {
 // --- FindFirstChild ---
 
 InstanceRef Instance::FindFirstChild(const std::string& Name, bool Recursive) const {
-    for (const auto& W : m_children) {
-        auto Child = W.lock();
-        if (!Child) continue;
+    for (const auto& Child : m_children) {
         if (Child->m_name == Name) return Child;
         if (Recursive) {
             auto Found = Child->FindFirstChild(Name, true);
@@ -128,9 +138,8 @@ InstanceRef Instance::FindFirstChild(const std::string& Name, bool Recursive) co
 // --- FindFirstChildOfClass ---
 
 InstanceRef Instance::FindFirstChildOfClass(const std::string& ClassName) const {
-    for (const auto& W : m_children) {
-        auto Child = W.lock();
-        if (Child && Child->m_className == ClassName) return Child;
+    for (const auto& Child : m_children) {
+        if (Child->m_className == ClassName) return Child;
     }
     return nullptr;
 }
@@ -138,9 +147,8 @@ InstanceRef Instance::FindFirstChildOfClass(const std::string& ClassName) const 
 // --- FindFirstChildWhichIsA ---
 
 InstanceRef Instance::FindFirstChildWhichIsA(const std::string& ClassName) const {
-    for (const auto& W : m_children) {
-        auto Child = W.lock();
-        if (Child && Child->IsA(ClassName)) return Child;
+    for (const auto& Child : m_children) {
+        if (Child->IsA(ClassName)) return Child;
     }
     return nullptr;
 }
@@ -151,6 +159,17 @@ InstanceRef Instance::FindFirstAncestor(const std::string& Name) const {
     auto Current = m_parent.lock();
     while (Current) {
         if (Current->m_name == Name) return Current;
+        Current = Current->m_parent.lock();
+    }
+    return nullptr;
+}
+
+// --- FindFirstAncestorWhichIsA ---
+
+InstanceRef Instance::FindFirstAncestorWhichIsA(const std::string& ClassName) const {
+    auto Current = m_parent.lock();
+    while (Current) {
+        if (Current->IsA(ClassName)) return Current;
         Current = Current->m_parent.lock();
     }
     return nullptr;
@@ -195,6 +214,26 @@ bool Instance::IsA(const std::string& ClassName) const {
     return m_className == ClassName || ClassName == "Instance";
 }
 
+// --- IsPropertyLocked / LockProperty / UnlockProperty ---
+// см. Replicator::CanClientChangeProperty — залоченные свойства
+// клиент не может менять напрямую, только сервер
+
+bool Instance::IsPropertyLocked(const std::string& Prop) const {
+    return std::find(m_lockedProps.begin(), m_lockedProps.end(), Prop) != m_lockedProps.end();
+}
+
+void Instance::LockProperty(const std::string& Prop) {
+    if (!IsPropertyLocked(Prop))
+        m_lockedProps.push_back(Prop);
+}
+
+void Instance::UnlockProperty(const std::string& Prop) {
+    m_lockedProps.erase(
+        std::remove(m_lockedProps.begin(), m_lockedProps.end(), Prop),
+        m_lockedProps.end()
+    );
+}
+
 // --- Destroy ---
 
 void Instance::Destroy() {
@@ -202,6 +241,11 @@ void Instance::Destroy() {
     m_destroyed = true;
 
     if (Destroying) Destroying();
+
+    // нужно дёрнуть OnDestroyed (хук Replicator-а) до того как мы
+    // отвалимся от shared_ptr-графа — иначе Replicator может не
+    // успеть снять netId из своих карт
+    if (OnDestroyed) OnDestroyed(shared_from_this());
 
     // nuke all children first
     auto Children = GetChildren();
@@ -216,13 +260,17 @@ void Instance::Destroy() {
     m_parent.reset();
 
     // disconnect all events so nothing fires anymore
-    ChildAdded        = nullptr;
-    ChildRemoved      = nullptr;
-    DescendantAdded   = nullptr;
+    ChildAdded         = nullptr;
+    ChildRemoved       = nullptr;
+    DescendantAdded    = nullptr;
     DescendantRemoving = nullptr;
-    AncestryChanged   = nullptr;
-    Destroying        = nullptr;
-    Changed           = nullptr;
+    AncestryChanged    = nullptr;
+    Destroying         = nullptr;
+    Changed            = nullptr;
+    OnChanged          = nullptr;
+    OnChildAdded       = nullptr;
+    OnChildRemoved     = nullptr;
+    OnDestroyed        = nullptr;
 }
 
 // --- Clone ---
@@ -236,10 +284,11 @@ InstanceRef Instance::CloneImpl() const {
     auto Copy = std::make_shared<Instance>(m_className);
     Copy->m_name       = m_name;
     Copy->m_archivable = m_archivable;
+    Copy->m_filterMode = m_filterMode;
+    Copy->m_lockedProps = m_lockedProps;
 
-    for (const auto& W : m_children) {
-        auto Child = W.lock();
-        if (!Child || !Child->m_archivable) continue;
+    for (const auto& Child : m_children) {
+        if (!Child->m_archivable) continue;
         auto ChildCopy = Child->Clone();
         if (ChildCopy)
             ChildCopy->SetParent(Copy);
@@ -258,7 +307,8 @@ void Instance::ClearAllChildren() {
 // --- NotifyChanged ---
 
 void Instance::NotifyChanged(const std::string& PropName) {
-    if (Changed) Changed(PropName);
+    if (Changed)   Changed(PropName);
+    if (OnChanged) OnChanged(PropName); // Replicator: InstanceChanged по сети
 }
 
 // --- FireDescendantAdded / FireDescendantRemoving ---

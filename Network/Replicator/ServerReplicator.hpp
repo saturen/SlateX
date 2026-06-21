@@ -8,7 +8,7 @@
 #include <functional>
 
 // server-side replicator
-// handles client connections and sends responses
+// handles client connections, datamodel replication, NetworkEvent traffic
 class ServerReplicator : public ReplicatorBase {
 public:
     explicit ServerReplicator(std::unique_ptr<ITransport> Transport);
@@ -16,18 +16,16 @@ public:
     // start listening — this is where the party begins
     bool Start(uint16_t Port);
 
-    // called when client sends us a message
-    // set this from your server script
-    std::function<void(ConnId, const std::string&)> OnMessageReceived;
-
-    // send a message to specific client
-    void SendMessage(ConnId Conn, const std::string& Message);
-
-    // send to all connected clients
-    void Broadcast(const std::string& Message);
+    // the currently running ServerReplicator, if any — lets NetworkEvent
+    // (which lives in Network, same as this class) reach a live connection
+    // without Network having to depend on Runtime::Engine
+    static ServerReplicator* GetActive() { return s_active; }
 
 protected:
     void OnPacketReceived(ConnId From, PacketSignal Signal, Deserializer& D) override;
     void OnClientConnected(ConnId Conn) override;
     void OnClientDisconnected(ConnId Conn, const std::string& Reason) override;
+
+private:
+    static ServerReplicator* s_active;
 };

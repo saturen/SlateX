@@ -25,7 +25,7 @@ if(WIN32)
     )
 endif()
 
-target_link_libraries(SXS PRIVATE Network)
+target_link_libraries(SXS PRIVATE Runtime)
 
 add_custom_command(TARGET SXS POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
