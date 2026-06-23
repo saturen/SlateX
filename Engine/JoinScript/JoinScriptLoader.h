@@ -7,25 +7,14 @@
 
 // JoinScriptLoader
 //
-//   SXS:    -h <путь>  -p <порт>   -> LoadHost(Port, Endpoint)
-//   Client: -j <путь>  -p <порт>   -> LoadJoin(Port, Endpoint)
+//   Server:    -h <endpoint>  -p <port>   -> LoadHost(Port, Endpoint)
+//   Client: -j <endpoint>  -p <port>   -> LoadJoin(Port, Endpoint)
 //
-// <путь> — путь эндпоинта относительно BaseUrl (по умолчанию
-// /GameApi/Generic/Host и /GameApi/Generic/Join соответственно).
-// Полный URL всегда BaseUrl + Endpoint, BaseUrl фиксирован и
-// проверяется в ValidateBaseUrl() — поменять домен через CLI нельзя,
-// только через AppSettings.ini (и он должен совпасть с kHardcodedBaseUrl).
-//
-// Алгоритм:
-//   1. ValidateBaseUrl() — AppSettings.BaseUrl должен == kHardcodedBaseUrl
-//   2. HTTP GET BaseUrl + Endpoint
-//   3. Crypt::VerifySign
-//   4. __JoinPort__ / __JoinAddress__ выставляются в Lua (Address — это
-//      хост из BaseUrl, без схемы, см. JoinScriptLoader.cpp)
-//   5. KakaScheduler::SpawnCode на Layer::Join
-//
-// Само решение host'ить или коннектиться принимает скрипт
-// (HostServer/ConnectServer доступны только Layer::Join — см. LuaSandbox).
+// <endpoint> — endpoint path relative to base url (
+// defaults:
+// /GameApi/Generic/Host 
+// /GameApi/Generic/Join
+// Resolves URL as: BaseUrl + Endpoint
 
 #ifdef _WIN32
 #define ENGINE_API __declspec(dllexport)

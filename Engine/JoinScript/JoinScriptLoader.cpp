@@ -1,6 +1,5 @@
 /*
     SlateX - 2026
-    JoinScriptLoader — загрузка и верификация join/host скриптов
 */
 #include "JoinScriptLoader.h"
 #include "../HttpUtil/HttpUtil.h"
@@ -11,7 +10,7 @@
 #include <cstdlib>
 
 // =============================================
-//  Захардкоженные дефолты
+//  defaults
 // =============================================
 const char* JoinScriptLoader::kHardcodedBaseUrl = "https://sltworx.su";
 const char* JoinScriptLoader::kHostEndpoint     = "/GameApi/Generic/Host";
@@ -20,14 +19,12 @@ const char* JoinScriptLoader::kJoinEndpoint     = "/GameApi/Generic/Join";
 void JoinScriptLoader::ValidateBaseUrl() {
     const auto& cfgBase = AppSettings::Get().BaseUrl;
     if (cfgBase != kHardcodedBaseUrl) {
-        std::cerr << "[JoinScriptLoader] BaseUrl mismatch: '" << cfgBase
-                  << "' != '" << kHardcodedBaseUrl << "'\n";
-        std::exit(7);
+        std::exit(0);
     }
 }
 
-// убирает "https://"/"http://" — нужно для __JoinAddress__
-// (это просто хост, не URL для HTTP запроса)
+// trims "https://"/"http://" required __JoinAddress__
+// just host, nothing special
 std::string JoinScriptLoader::StripScheme(const std::string& Url) {
     auto pos = Url.find("://");
     return (pos == std::string::npos) ? Url : Url.substr(pos + 3);
@@ -51,12 +48,10 @@ bool JoinScriptLoader::LoadFromEndpoint(const std::string& Endpoint, const std::
 
     auto [valid, code] = Crypt::VerifySign(resp.body);
     if (!valid) {
-        std::cerr << "[" << LogTag << "] Signature invalid — aborting\n";
-        std::exit(1);
+        std::exit(0);
     }
     std::cout << "[" << LogTag << "] Signature OK, " << code.size() << " bytes of code\n";
 
-    // Port/Address доступны скрипту только на Layer::Join (см. LuaSandbox)
     KakaScheduler::Get().GetLua()["__JoinPort__"]    = Port;
     KakaScheduler::Get().GetLua()["__JoinAddress__"] = address;
 

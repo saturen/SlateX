@@ -66,7 +66,7 @@ private:
 };
 
 // ---------------------------------------------------------
-// Форвард-декларация — реальные специализации лежат в PropTraits.hpp.
+// Forward-declaration — real realization in PropTraits.hpp
 // Без неё компилятор не знает, что PropTraits — это шаблон, и
 // PropTraits<T>::kType ниже не парсится как template-id вообще
 // (классическая ловушка двухфазного поиска имён в шаблонах).
@@ -75,8 +75,8 @@ template<typename T>
 struct PropTraits;
 
 // ---------------------------------------------------------
-// Типобезопасный helper — генерит lua get/set + serialize по T.
-// Требует специализацию PropTraits<T> (см. PropTraits.hpp):
+// type safe helper — generates lua get/set + serialize by T.
+// Requires specialization of PropTraits<T> (ex. PropTraits.hpp):
 //   PropTraits<T>::kType, ToLua(T, L), FromLua(sol::object),
 //   Serialize(T), Deserialize(string)
 // ---------------------------------------------------------
@@ -111,7 +111,7 @@ PropertyDescriptor MakeProperty(
 }
 
 // ---------------------------------------------------------
-// Макросы регистрации — тонкая обёртка, основная работа в MakeProperty<>
+// macrosses
 // ---------------------------------------------------------
 #define SLATE_CLASS_BEGIN(ClassType, BaseName)                  \
     static bool __slate_register_##ClassType = [] {             \

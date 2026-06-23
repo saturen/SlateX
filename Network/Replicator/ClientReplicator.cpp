@@ -2,6 +2,9 @@
     SlateX - 2026
 */
 #include "ClientReplicator.hpp"
+#include "../Shared/NetworkEvent.hpp"
+#include "../Shared/LuaArgSerializer.hpp"
+#include "../../Engine/Scripting/KakaScheduler.hpp"
 #include <iostream>
 
 ClientReplicator* ClientReplicator::s_active = nullptr;
@@ -36,8 +39,23 @@ void ClientReplicator::OnPacketReceived(ConnId From, PacketSignal Signal, Deseri
     case PacketSignal::Pong:
         // da server is alive
         break;
-    // RemoteEvent / RemoteFunction are handled by NetworkEvent (see
-    // Network/Shared/NetworkEvent.hpp)
+    case PacketSignal::RemoteEvent: {
+        uint32_t netId = D.ReadUInt32();
+        auto args = LuaArgSerializer::DeserializeArgs(D, KakaScheduler::Get().GetLua());
+        NetworkEvent::DispatchFire(netId, From, args, /*IsServerSide=*/false);
+        break;
+    }
+    case PacketSignal::RemoteFunction: {
+        uint8_t subtype = D.ReadByte();
+        uint32_t netId  = D.ReadUInt32();
+        uint64_t reqId  = D.ReadUInt64();
+        auto args = LuaArgSerializer::DeserializeArgs(D, KakaScheduler::Get().GetLua());
+        if (subtype == 0)
+            NetworkEvent::DispatchInvokeRequest(netId, From, reqId, args, /*IsServerSide=*/false);
+        else
+            NetworkEvent::DispatchInvokeResponse(reqId, args);
+        break;
+    }
     default:
         if (m_log)
             m_log->Warn("Unknown packet", std::to_string(static_cast<int>(Signal)));

@@ -11,19 +11,18 @@
 #include "../Math/CFrame.hpp"
 #include "Reflection.hpp"
 
-// PropTraits<T> — специализации под каждый тип свойства.
-// Reflection.hpp::MakeProperty<> дёргает эти четыре статика,
-// чтобы не писать getLua/setLua/serialize/deserialize руками
-// на каждое свойство (как было в gen2).
+// PropTraits<T>.
+// Reflection.hpp::MakeProperty<> uses those 4 properties
+// to avoid repeating getLua/setLua/serialize/deserialize every time
 //
-//   kType      — PropType для сетевого протокола
-//   ToLua       — C++ значение -> sol::object для Lua
-//   FromLua     — sol::object -> std::optional<T> (nullopt если тип не совпал)
-//   Serialize   — T -> raw bytes (std::string как контейнер байт)
+//   kType      — PropType for networking
+//   ToLua       — C++ -> sol::object
+//   FromLua     — sol::object -> std::optional<T> (nullopt if something wrong)
+//   Serialize   — T -> raw bytes (std::string as container)
 //   Deserialize — raw bytes -> T
 
 template<typename T>
-struct PropTraits; // нет общей реализации — каждый тип специализируется ниже
+struct PropTraits;
 
 // --- bool ---
 template<>

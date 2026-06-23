@@ -30,6 +30,15 @@ public:
 
     void Fire(const std::vector<sol::object>& Args);
 
+    // Returns the first registered connection's function, or an invalid
+    // sol::function if none. Used for Type::Function NetworkEvents, where
+    // OnServer/OnClient conceptually behave like Roblox's single-callback
+    // OnServerInvoke/OnClientInvoke rather than a multi-listener signal —
+    // if more than one connection is registered, only the first answers.
+    sol::function GetFirstHandler() const {
+        return m_connections.empty() ? sol::function() : m_connections.front().fn;
+    }
+
 private:
     struct ConnEntry {
         uint64_t     id;

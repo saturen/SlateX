@@ -12,11 +12,11 @@
 #define ENGINE_API
 #endif
 
-// CFrame — позиция + ориентация (3x3 матрица поворота, row-major).
-// R[0..2] = right, R[3..5] = up, R[6..8] = back (как в Roblox).
+// CFrame — pos + rotation (3x3 rotation matrix, row-major).
+// R[0..2] = right, R[3..5] = up, R[6..8] = back
 struct ENGINE_API CFrame {
     Vector3 Position;
-    float   R[9] = { 1,0,0,  0,1,0,  0,0,1 }; // identity по умолчанию
+    float   R[9] = { 1,0,0,  0,1,0,  0,0,1 }; // identity
 
     CFrame() = default;
     explicit CFrame(const Vector3& Pos) : Position(Pos) {}
@@ -26,14 +26,14 @@ struct ENGINE_API CFrame {
 
     static CFrame Identity() { return CFrame(); }
 
-    // --- сдвиг по мировым осям (не трогает поворот) ---
+    // --- meow ---
     CFrame operator+(const Vector3& Delta) const {
         CFrame Out = *this;
         Out.Position = Position + Delta;
         return Out;
     }
 
-    // --- композиция (this * other), как умножение матриц 4x4 ---
+    // --- composition (this * other) as 4x4 matrix ---
     CFrame operator*(const CFrame& o) const {
         CFrame Out;
         // R_out = R_this * R_other
@@ -50,7 +50,7 @@ struct ENGINE_API CFrame {
         return Out;
     }
 
-    // переводит точку из локального пространства этого CFrame в мировое
+    // self explainatory
     Vector3 PointToWorldSpace(const Vector3& p) const {
         return Position + Vector3(
             R[0]*p.X + R[1]*p.Y + R[2]*p.Z,
@@ -59,7 +59,7 @@ struct ENGINE_API CFrame {
         );
     }
 
-    // обратное преобразование (мировая точка -> локальная, R^T т.к. R ортонормальна)
+    // WorldSpace converter (WorldPos -> local, R^T bc R being funny)
     Vector3 PointToObjectSpace(const Vector3& p) const {
         Vector3 d = p - Position;
         return Vector3(

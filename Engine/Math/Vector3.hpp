@@ -18,7 +18,7 @@ struct ENGINE_API Vector3 {
     Vector3() = default;
     Vector3(float x, float y, float z) : X(x), Y(y), Z(z) {}
 
-    // --- Арифметика ---
+    // --- math ---
     Vector3 operator+(const Vector3& o) const { return {X+o.X, Y+o.Y, Z+o.Z}; }
     Vector3 operator-(const Vector3& o) const { return {X-o.X, Y-o.Y, Z-o.Z}; }
     Vector3 operator*(const Vector3& o) const { return {X*o.X, Y*o.Y, Z*o.Z}; }
@@ -31,7 +31,7 @@ struct ENGINE_API Vector3 {
         return X == o.X && Y == o.Y && Z == o.Z;
     }
 
-    // --- Методы ---
+    // --- Methods ---
     float Magnitude() const {
         return std::sqrt(X*X + Y*Y + Z*Z);
     }
@@ -64,7 +64,7 @@ struct ENGINE_API Vector3 {
                           + std::to_string(Z) + ")";
     }
 
-    // --- Константы ---
+    // --- variables ---
     static Vector3 Zero()  { return {0, 0, 0}; }
     static Vector3 One()   { return {1, 1, 1}; }
     static Vector3 XAxis() { return {1, 0, 0}; }
@@ -72,7 +72,7 @@ struct ENGINE_API Vector3 {
     static Vector3 ZAxis() { return {0, 0, 1}; }
 };
 
-// Скаляр * Vector3
+// scaler * Vector3
 inline Vector3 operator*(float s, const Vector3& v) {
     return {s*v.X, s*v.Y, s*v.Z};
 }
