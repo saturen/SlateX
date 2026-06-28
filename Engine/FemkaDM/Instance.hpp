@@ -14,9 +14,9 @@ using InstanceRef  = std::shared_ptr<Instance>;
 using InstanceWeak = std::weak_ptr<Instance>;
 
 enum class FilterMode : uint32_t {
-    Server = 0,  // не реплицируется клиентам вообще
-    Shared = 1,  // реплицируется всем, изменяем с обеих сторон (с проверкой ownership)
-    Client = 2,  // реплицируется всем, но "истина" живёт на клиенте-владельце
+    Server = 0,  // server only
+    Shared = 1,  // client/server (ownership check)
+    Client = 2,  // client only
 };
 
 // base class for everything in the datamodel tree
@@ -35,7 +35,7 @@ public:
     // virtual IsA — переопределяется в каждом наследнике, проверяет всю цепочку
     virtual bool IsA(const std::string& ClassName) const;
 
-    // --- сеть ---
+    // --- network ---
 
     uint32_t   GetNetId() const { return m_netId; }
     void       SetNetId(uint32_t id);
@@ -45,6 +45,16 @@ public:
     static InstanceRef FindByNetId(uint32_t id);
     FilterMode GetFilterMode() const { return m_filterMode; }
     void       SetFilterMode(FilterMode m) { m_filterMode = m; }
+
+    // nullptr = server owns it, otherwise da owning Player (no Player class
+    // yet, so for now this just accepts any Instance — restrict to Player
+    // once that class exists). this is groundwork only, nothing enforces
+    // who's actually allowed to write what based on this yet
+    InstanceRef GetNetworkOwner() const { return m_networkOwner; }
+    void        SetNetworkOwner(InstanceRef Owner) {
+        m_networkOwner = Owner;
+        NotifyChanged("NetworkOwner");
+    }
 
     // --- tree traversal ---
 
@@ -73,9 +83,12 @@ public:
     // full path like "Workspace.Model.Part"
     std::string GetFullName() const;
 
-    // waits until child with given name shows up
-    // returns nullptr if it sucks and times out (timeoutSec <= 0 means wait forever)
-    InstanceRef WaitForChild(const std::string& Name, double TimeoutSec = 0.0);
+    // waits until child with given name shows up — actual yield/timeout
+    // logic lives Lua-side now (Instance:WaitForChild, see LuaVM.cpp), this
+    // is just da C++ bookkeeping bit it calls into for da slow path
+    void RegisterChildWaiter(const std::string& Name, uint64_t RequestId) {
+        m_childWaiters[Name].push_back(RequestId);
+    }
 
     // --- hierarchy checks ---
 
@@ -96,7 +109,7 @@ public:
 
     bool IsDestroyed() const { return m_destroyed; }
 
-    // --- свойства: блокировка от записи по сети (см. Replicator::CanClientChangeProperty) ---
+    // --- cant change (см. Replicator::CanClientChangeProperty) ---
 
     bool IsPropertyLocked(const std::string& Prop) const;
     void LockProperty(const std::string& Prop);
@@ -148,6 +161,10 @@ protected:
     InstanceWeak              m_parent;
     std::vector<InstanceRef>  m_children;
     std::vector<std::string>  m_lockedProps;
+    InstanceRef                m_networkOwner; // nullptr = server
+
+    // name -> pending WaitForChild request ids, resolved in AddChild
+    std::unordered_map<std::string, std::vector<uint64_t>> m_childWaiters;
 
     // called by subclasses to fire Changed event
     void NotifyChanged(const std::string& PropName);

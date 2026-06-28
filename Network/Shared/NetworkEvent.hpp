@@ -25,11 +25,11 @@ enum class NetProto : uint8_t {
 // NetworkEvent — the Lua-facing FireServer/FireClient/InvokeServer/etc API.
 // Lives in Network/ (not Engine/FemkaDM/) because it needs to reach a live
 // ServerReplicator/ClientReplicator to actually send anything, and Engine
-// can't depend on Network (see Runtime/Engine.hpp for why).
+// can't depend on Network (see Runtime/Engine.hpp).
 //
-// NOTE: there's no real Player/Players system yet, so server-side handlers
-// currently receive the raw ConnId (as a plain number) where a Player
-// instance would normally go. This is a known placeholder, not final API.
+// OnServer/server-side InvokeServer handlers get a real Player as their
+// first arg now (see PushPlayerArg in NetworkEvent.cpp) — resolved through
+// Player::FindByConnId, nil if somehow nobody's hooked up yet.
 class NetworkEvent : public Instance {
 public:
     NetworkEvent();

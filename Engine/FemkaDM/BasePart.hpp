@@ -38,8 +38,8 @@ private:
 };
 
 // --- регистрация свойств: компактно, без лямбд вручную ---
-SLATE_CLASS_BEGIN(BasePart, "PVInstance")
+SLATE_CLASS_BEGIN(BasePart, PVInstance)
     SLATE_PROP(BasePart, "CFrame",   GetCFrame,   SetCFrame)
     SLATE_PROP(BasePart, "Size",     GetSize,     SetSize)
     SLATE_PROP(BasePart, "Anchored", GetAnchored, SetAnchored)
-SLATE_CLASS_END(BasePart)
+SLATE_CLASS_END(BasePart, PVInstance)

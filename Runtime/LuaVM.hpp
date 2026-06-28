@@ -31,6 +31,8 @@ private:
     void RegisterEngineBindings();
     void RegisterHttpBindings();
     void RegisterInstanceBindings();
+    void RegisterSignalBindings();
+    void RegisterPlayerBindings();
 
     std::unique_ptr<sol::state> m_lua;
     bool m_initialized = false;

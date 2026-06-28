@@ -24,4 +24,5 @@ enum class PacketSignal : uint8_t {
     // --- misc ---
     Ping             = 0x30,
     Pong             = 0x31,
+    LocalPlayer      = 0x32,  // server -> da connecting client only: NetId of their own Player
 };

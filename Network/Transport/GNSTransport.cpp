@@ -58,16 +58,16 @@ bool GNSTransport::StartServer(uint16_t Port) {
     return true;
 }
 
-void GNSTransport::SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data) {
+void GNSTransport::SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data, bool Reliable) {
     Serializer Packet;
     Packet.WriteByte(static_cast<uint8_t>(Signal));
     Packet.WriteRawBuffer(Data.GetBuffer());
-    SendRaw(ToGNS(Conn), Packet.GetBuffer());
+    SendRaw(ToGNS(Conn), Packet.GetBuffer(), Reliable);
 }
 
-void GNSTransport::SendToAll(PacketSignal Signal, Serializer& Data) {
+void GNSTransport::SendToAll(PacketSignal Signal, Serializer& Data, bool Reliable) {
     for (auto Conn : m_clients)
-        SendTo(Conn, Signal, Data);
+        SendTo(Conn, Signal, Data, Reliable);
 }
 
 void GNSTransport::Kick(ConnId Conn, const std::string& Reason) {
@@ -88,12 +88,12 @@ bool GNSTransport::Connect(const std::string& Host, uint16_t Port) {
     SteamNetworkingIPAddr Addr;
     Addr.Clear();
 
-    // Сначала пробуем как IPv4
+    // try IPv4 first
     struct in_addr ipv4;
     if (inet_pton(AF_INET, Host.c_str(), &ipv4) == 1) {
         Addr.SetIPv4(ntohl(ipv4.s_addr), Port);
     } else {
-        // Резолвим домен
+        // resolve as a domain name
         struct addrinfo hints{}, *res = nullptr;
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
@@ -120,13 +120,13 @@ bool GNSTransport::Connect(const std::string& Host, uint16_t Port) {
     return true;
 }
 
-void GNSTransport::Send(PacketSignal Signal, Serializer& Data) {
+void GNSTransport::Send(PacketSignal Signal, Serializer& Data, bool Reliable) {
     if (m_serverConn == k_HSteamNetConnection_Invalid) return;
 
     Serializer Packet;
     Packet.WriteByte(static_cast<uint8_t>(Signal));
     Packet.WriteRawBuffer(Data.GetBuffer());
-    SendRaw(m_serverConn, Packet.GetBuffer());
+    SendRaw(m_serverConn, Packet.GetBuffer(), Reliable);
 }
 
 // =============================================
@@ -184,10 +184,11 @@ void GNSTransport::Shutdown() {
 //  Internal
 // =============================================
 
-void GNSTransport::SendRaw(HSteamNetConnection Conn, const std::vector<uint8_t>& Bytes) {
+void GNSTransport::SendRaw(HSteamNetConnection Conn, const std::vector<uint8_t>& Bytes, bool Reliable) {
+    int Flags = Reliable ? k_nSteamNetworkingSend_Reliable : k_nSteamNetworkingSend_Unreliable;
     m_interface->SendMessageToConnection(
         Conn, Bytes.data(), static_cast<uint32_t>(Bytes.size()),
-        k_nSteamNetworkingSend_Reliable, nullptr
+        Flags, nullptr
     );
 }
 

@@ -48,11 +48,14 @@ public:
     // returns true if it doesnt suck
     virtual bool StartServer(uint16_t Port) = 0;
 
-    // send packet to specific client
-    virtual void SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data) = 0;
+    // send packet to specific client. Reliable defaults to true — every
+    // core protocol packet (Welcome/Snapshot/InstanceAdded/etc) needs to
+    // actually arrive, only NetworkEvent's RemoteEvent path (when
+    // NetProto::UDP is set) explicitly passes false
+    virtual void SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data, bool Reliable = true) = 0;
 
     // send to all connected clients
-    virtual void SendToAll(PacketSignal Signal, Serializer& Data) = 0;
+    virtual void SendToAll(PacketSignal Signal, Serializer& Data, bool Reliable = true) = 0;
 
     // kick a client with reason
     virtual void Kick(ConnId Conn, const std::string& Reason) = 0;
@@ -67,7 +70,7 @@ public:
     virtual bool Connect(const std::string& Host, uint16_t Port) = 0;
 
     // send packet to server
-    virtual void Send(PacketSignal Signal, Serializer& Data) = 0;
+    virtual void Send(PacketSignal Signal, Serializer& Data, bool Reliable = true) = 0;
 
     // --- both sides ---
 

@@ -1,6 +1,5 @@
 /*
     SlateX - 2026
-    KakaScheduler — реализация
 */
 #include "KakaScheduler.hpp"
 #include "LuaSandbox.hpp"
@@ -92,6 +91,18 @@ void KakaScheduler::Tick(double now) {
         [](const KakaTask& t) { return !t.co.runnable(); }
     );
 
+    // fire due timers — plain C++ callbacks, separate from da coroutine
+    // task list above, see CallLater
+    for (auto it = m_timers.begin(); it != m_timers.end(); ) {
+        if (now >= it->first) {
+            auto fn = std::move(it->second);
+            it = m_timers.erase(it);
+            fn();
+        } else {
+            ++it;
+        }
+    }
+
     m_ticking = false;
     FlushPending();
 }
@@ -125,6 +136,10 @@ bool KakaScheduler::FulfillRequest(uint64_t requestId, std::vector<sol::object> 
         }
     }
     return false;
+}
+
+void KakaScheduler::CallLater(double DelaySec, std::function<void()> Fn) {
+    m_timers.push_back({ m_now + DelaySec, std::move(Fn) });
 }
 
 void KakaScheduler::Spawn(sol::function fn, double delay,

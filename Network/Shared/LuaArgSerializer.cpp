@@ -5,6 +5,7 @@
 #include "../../Engine/FemkaDM/Instance.hpp"
 #include "../../Engine/Math/Vector3.hpp"
 #include "../../Engine/Math/CFrame.hpp"
+#include "../../Engine/Reflection/Reflection.hpp"
 #include <iostream>
 
 void LuaArgSerializer::SerializeArg(Serializer& S, const sol::object& Val) {
@@ -107,7 +108,12 @@ sol::object LuaArgSerializer::DeserializeArg(Deserializer& D, sol::state_view Lu
             uint32_t netId = D.ReadUInt32();
             auto inst = Instance::FindByNetId(netId);
             if (!inst) return sol::make_object(Lua, sol::lua_nil);
-            return sol::make_object(Lua, inst);
+            // см. ClassRegistry::Push в Reflection.hpp — без него любой
+            // Instance, переданный как аргумент NetworkEvent'а, всегда
+            // придёт на той стороне типизированным как plain Instance,
+            // независимо от того, NetworkEvent это был, Part, или что угодно
+            // ещё со своими native sol2-членами
+            return ClassRegistry::Get().Push(inst, Lua);
         }
 
         case LuaArgTag::Table: {

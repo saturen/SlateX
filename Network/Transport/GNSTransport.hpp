@@ -21,14 +21,14 @@ public:
 
     // --- server ---
     bool StartServer(uint16_t Port) override;
-    void SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data) override;
-    void SendToAll(PacketSignal Signal, Serializer& Data) override;
+    void SendTo(ConnId Conn, PacketSignal Signal, Serializer& Data, bool Reliable = true) override;
+    void SendToAll(PacketSignal Signal, Serializer& Data, bool Reliable = true) override;
     void Kick(ConnId Conn, const std::string& Reason) override;
     std::vector<ConnId> GetClients() const override;
 
     // --- client ---
     bool Connect(const std::string& Host, uint16_t Port) override;
-    void Send(PacketSignal Signal, Serializer& Data) override;
+    void Send(PacketSignal Signal, Serializer& Data, bool Reliable = true) override;
 
     // --- both ---
     void Poll() override;
@@ -44,8 +44,9 @@ private:
         return static_cast<HSteamNetConnection>(Conn);
     }
 
-    // sends raw bytes to a GNS connection
-    void SendRaw(HSteamNetConnection Conn, const std::vector<uint8_t>& Bytes);
+    // sends raw bytes to a GNS connection — Reliable picks
+    // k_nSteamNetworkingSend_Reliable vs ..._Unreliable
+    void SendRaw(HSteamNetConnection Conn, const std::vector<uint8_t>& Bytes, bool Reliable);
 
     // dispatches incoming message to OnPacketReceived callback
     void DispatchMessage(ConnId From, const void* Data, size_t Size);

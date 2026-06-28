@@ -143,3 +143,40 @@ struct PropTraits<std::string> {
     static std::string Serialize(const std::string& v) { return v; }
     static std::string Deserialize(const std::string& data) { return data; }
 };
+
+// --- InstanceRef (nilable — used for NetworkOwner and any other prop that
+// points at another Instance instead of holding a plain value) ---
+template<>
+struct PropTraits<InstanceRef> {
+    static constexpr PropType kType = PropType::InstanceRef_;
+
+    static sol::object ToLua(InstanceRef v, lua_State* L) {
+        if (!v) return sol::make_object(L, sol::lua_nil);
+        // gotta go through ClassRegistry::Push, not a raw sol::make_object —
+        // same polymorphism gotcha as everywhere else InstanceRef crosses
+        // into Lua (see PushFn comment in Reflection.hpp), otherwise da
+        // owner always shows up typed as plain Instance no matter what it
+        // actually is
+        return ClassRegistry::Get().Push(v, L);
+    }
+    static std::optional<InstanceRef> FromLua(sol::object v) {
+        // nil is a VALID value here (clears da owner back to server-owned),
+        // gotta return an optional CONTAINING nullptr, not nullopt —
+        // nullopt means "reject this, dont change anything"
+        if (v.get_type() == sol::type::nil) return InstanceRef(nullptr);
+        if (!v.is<InstanceRef>()) return std::nullopt;
+        return v.as<InstanceRef>();
+    }
+    static std::string Serialize(InstanceRef v) {
+        uint32_t NetId = v ? v->GetNetId() : 0;
+        std::string out(sizeof(uint32_t), '\0');
+        std::memcpy(out.data(), &NetId, sizeof(uint32_t));
+        return out;
+    }
+    static InstanceRef Deserialize(const std::string& data) {
+        uint32_t NetId = 0;
+        if (data.size() >= sizeof(uint32_t))
+            std::memcpy(&NetId, data.data(), sizeof(uint32_t));
+        return Instance::FindByNetId(NetId);
+    }
+};

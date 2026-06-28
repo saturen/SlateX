@@ -2,6 +2,8 @@
     SlateX - 2026
 */
 #include "Instance.hpp"
+#include "../Reflection/PropTraits.hpp"
+#include "../Scripting/KakaScheduler.hpp"
 #include <algorithm>
 #include <sstream>
 
@@ -14,6 +16,22 @@ Instance::~Instance() {
     // с owning m_children (shared_ptr) деструктор и так не вызовется,
     // пока родитель нас держит — отдельная отвязка тут не нужна
 }
+
+// --- NetworkOwner reflection registration ---
+// registered straight here, not through SLATE_CLASS_BEGIN/END — Instance
+// itself never gets a factory (nothing ever does Instance.new("Instance")),
+// just needs da one property visible to da chain-walk in LuaVM's
+// InstanceIndex/InstanceNewIndex. baseClassName empty on purpose, dis is
+// where da chain stops.
+static bool __slate_register_Instance_props = [] {
+    ClassDescriptor Desc;
+    Desc.className     = "Instance";
+    Desc.baseClassName = "";
+    Desc.members.push_back(MakeProperty<Instance>(
+        "NetworkOwner", &Instance::GetNetworkOwner, &Instance::SetNetworkOwner));
+    ClassRegistry::Get().Register(std::move(Desc));
+    return true;
+}();
 
 // --- NetId registry ---
 // статика на файл, не на класс — чтобы не тащить unordered_map в каждый .o,
@@ -80,6 +98,17 @@ void Instance::AddChild(InstanceRef Child) {
     if (ChildAdded) ChildAdded(Child);
     if (OnChildAdded) OnChildAdded(Child); // Replicator: InstanceAdded по сети
     FireDescendantAdded(Child);
+
+    // resolve anyone waiting on a child with this exact name (see
+    // RegisterChildWaiter / Instance:WaitForChild in LuaVM.cpp)
+    auto It = m_childWaiters.find(Child->GetName());
+    if (It != m_childWaiters.end()) {
+        auto& Lua = KakaScheduler::Get().GetLua();
+        sol::object Pushed = ClassRegistry::Get().Push(Child, Lua.lua_state());
+        for (uint64_t Id : It->second)
+            KakaScheduler::Get().FulfillRequest(Id, { Pushed });
+        m_childWaiters.erase(It);
+    }
 }
 
 void Instance::RemoveChild(Instance* Child) {
@@ -183,13 +212,8 @@ std::string Instance::GetFullName() const {
     return Parent->GetFullName() + "." + m_name;
 }
 
-// --- WaitForChild ---
-
-InstanceRef Instance::WaitForChild(const std::string& Name, double TimeoutSec) {
-    // for now just check if it already exists — scheduler integration comes later
-    // da lazy version
-    return FindFirstChild(Name);
-}
+// --- WaitForChild --- see RegisterChildWaiter (Instance.hpp) and
+// Instance:WaitForChild (LuaVM.cpp) for da actual yield/timeout logic
 
 // --- IsDescendantOf / IsAncestorOf ---
 
@@ -271,6 +295,8 @@ void Instance::Destroy() {
     OnChildAdded       = nullptr;
     OnChildRemoved     = nullptr;
     OnDestroyed        = nullptr;
+
+    m_networkOwner = nullptr;
 }
 
 // --- Clone ---

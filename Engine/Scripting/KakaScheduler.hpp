@@ -99,6 +99,13 @@ public:
     // inside a packet-received callback during Poll(), before Tick() runs.
     bool FulfillRequest(uint64_t requestId, std::vector<sol::object> args);
 
+    // Schedules a plain C++ callback to run once, after DelaySec seconds —
+    // no Lua coroutine involved at all. Used by WaitForChild's timeout (it
+    // races a real "child showed up" resolution against this, whichever
+    // fires first wins — calling FulfillRequest twice for an already-
+    // resolved id is harmless, see FulfillRequest above).
+    void CallLater(double DelaySec, std::function<void()> Fn);
+
 private:
     KakaScheduler() = default;
     void FlushPending();
@@ -110,4 +117,8 @@ private:
     bool                  m_ticking        = false;
     KakaTask*             m_currentTask    = nullptr; // set only while Tick() is resuming this task
     uint64_t              m_nextRequestId  = 1;
+
+    // (fireAt, fn) pairs for CallLater — checked once per Tick(), separate
+    // from m_tasks since these aint Lua coroutines at all
+    std::vector<std::pair<double, std::function<void()>>> m_timers;
 };

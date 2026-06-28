@@ -3,6 +3,7 @@
 */
 #pragma once
 #include "ReplicatorBase.hpp"
+#include "../../Engine/FemkaDM/Instance.hpp"
 #include <functional>
 #include <string>
 
@@ -33,4 +34,12 @@ protected:
 
 private:
     static ClientReplicator* s_active;
+
+    // server says "this NetId/ParentNetId/ClassName/Name now exists" —
+    // either reuse an already-local top-level service (da 6 default ones
+    // CreateDefaultServices already made on this side too) or spawn a
+    // fresh Instance via ClassRegistry and parent it. Used by both
+    // Snapshot (looped over every entry) and InstanceAdded (one at a time)
+    void ApplyInstanceAdded(uint32_t NetId, uint32_t ParentNetId,
+                             const std::string& ClassName, const std::string& Name);
 };

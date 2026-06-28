@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
 
     std::cout << "[SXS] SlateX Server\n";
 
-    // -h <путь до host-эндпоинта>   -p <порт>
+    // -h <path host-endpoint>   -p <port>
     std::string HostEndpoint = ParseStringArg(argc, argv, "-h", JoinScriptLoader::kHostEndpoint);
     uint16_t    Port         = ParsePortArg(argc, argv, 1818);
 
@@ -55,17 +55,15 @@ int main(int argc, char** argv) {
     Engine_.OnServerReplicatorAwake = [](ServerReplicator& Replicator) {
     };
 
-    // на случай если host-скрипт сам решит ConnectServer() вместо HostServer()
     Engine_.OnClientReplicatorAwake = [](ClientReplicator& Replicator) {
-        std::cout << "[SXS] (?) host script decided to connect instead of host\n";
+        std::cout << "????? \n";
         Replicator.OnConnectedToServer = []() {
-            std::cout << "[SXS] Connected as client (host script's own call)\n";
+            std::cout << "im not going to talk about it.\n";
         };
     };
 
-    // -h/-p только задают эндпоинт и порт, решает host-скрипт
     if (!JoinScriptLoader::LoadHost(Port, HostEndpoint)) {
-        std::cerr << "[SXS] Failed to load host script — exiting\n";
+        std::cerr << "failed to load host\n";
         return 1;
     }
 
